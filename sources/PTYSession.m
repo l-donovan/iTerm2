@@ -119,6 +119,8 @@ static NSString *const SESSION_ARRANGEMENT_LIVE_SESSION = @"Live Session";  // I
 static NSString *const SESSION_ARRANGEMENT_SUBSTITUTIONS = @"Substitutions";  // Dictionary for $$VAR$$ substitutions
 static NSString *const SESSION_UNIQUE_ID = @"Session Unique ID";  // DEPRECATED. A string used for restoring soft-terminated sessions for arrangements that predate the introduction of the GUID.
 static NSString *const SESSION_ARRANGEMENT_SERVER_PID = @"Server PID";  // PID for server process for restoration
+// TODO: Make server report the TTY to us since orphans will end up with a nil tty.
+static NSString *const SESSION_ARRANGEMENT_TTY = @"TTY";  // TTY name. Used when using restoration to connect to a restored server.
 static NSString *const SESSION_ARRANGEMENT_VARIABLES = @"Variables";  // _variables
 static NSString *const SESSION_ARRANGEMENT_COMMAND_RANGE = @"Command Range";  // VT100GridCoordRange
 static NSString *const SESSION_ARRANGEMENT_SHELL_INTEGRATION_EVER_USED = @"Shell Integration Ever Used";  // BOOL
@@ -779,6 +781,7 @@ ITERM_WEAKLY_REFERENCEABLE
                     DLog(@"Success!");
                     runCommand = NO;
                     attachedToServer = YES;
+                    aSession.shell.tty = arrangement[SESSION_ARRANGEMENT_TTY];
                     shouldEnterTmuxMode = ([arrangement[SESSION_ARRANGEMENT_IS_TMUX_GATEWAY] boolValue] &&
                                            arrangement[SESSION_ARRANGEMENT_TMUX_GATEWAY_SESSION_NAME] != nil &&
                                            arrangement[SESSION_ARRANGEMENT_TMUX_GATEWAY_SESSION_ID] != nil);
@@ -3339,6 +3342,9 @@ ITERM_WEAKLY_REFERENCEABLE
         // These values are used for restoring sessions after a crash.
         if ([iTermAdvancedSettingsModel runJobsInServers] && !_shell.pidIsChild) {
             result[SESSION_ARRANGEMENT_SERVER_PID] = @(_shell.serverPid);
+            if (self.tty) {
+                result[SESSION_ARRANGEMENT_TTY] = self.tty;
+            }
         }
     }
     if (self.tmuxMode == TMUX_GATEWAY && self.tmuxController.sessionName) {
@@ -4945,15 +4951,8 @@ ITERM_WEAKLY_REFERENCEABLE
                 send_str = (unsigned char *)[keydat bytes];
                 send_strlen = [keydat length];
             }
-        } else if (((leftAltPressed && [self optionKey] != OPT_NORMAL) ||
-                    (rightAltPressed && [self rightOptionKey] != OPT_NORMAL)) && ![unmodkeystr isEqualToString:@"¥"]) {
-            // A note on the weird ¥ exception:
-            // On some Japanese keyboards, there is no backslash. It's replaced with ¥, or else
-            // option-¥ gives you backslash.
-            // Users like option to do esc+ and option-¥ to give backslash, which they're used to
-            // because iTerm (pre iTerm2, even) always did that. esc+¥ is not used much, so we
-            // make an accommodation. If a user really wants esc+¥ they'll have to add a key
-            // binding. See issue 4778 for more.
+        } else if ((leftAltPressed && [self optionKey] != OPT_NORMAL) ||
+                   (rightAltPressed && [self rightOptionKey] != OPT_NORMAL)) {
             DLog(@"PTYSession keyDown opt + key -> modkey");
             // A key was pressed while holding down option and the option key
             // is not behaving normally. Apply the modified behavior.
@@ -6302,17 +6301,24 @@ ITERM_WEAKLY_REFERENCEABLE
 }
 
 - (void)reveal {
+    DLog(@"Reveal session %@", self);
     NSWindowController<iTermWindowController> *terminal = [_delegate realParentWindow];
     iTermController *controller = [iTermController sharedInstance];
     if ([terminal isHotKeyWindow]) {
+        DLog(@"Showing hotkey window");
         [[HotkeyWindowController sharedInstance] showHotKeyWindow];
     } else {
+        DLog(@"Making window current");
         [controller setCurrentTerminal:(PseudoTerminal *)terminal];
+        DLog(@"Making window key and ordering front");
         [[terminal window] makeKeyAndOrderFront:self];
+        DLog(@"Selecting tab from delegate %@", _delegate);
         [_delegate sessionSelectContainingTab];
     }
+    DLog(@"Activate the app");
     [[NSApplication sharedApplication] activateIgnoringOtherApps:YES];
 
+    DLog(@"Make this session active in delegate %@", _delegate);
     [_delegate setActiveSession:self];
 }
 

@@ -1067,7 +1067,7 @@ static const int kDragThreshold = 3;
 - (void)drawRect:(NSRect)rect {
     BOOL savedCursorVisible = _drawingHelper.cursorVisible;
 
-    // Try to use a saved grid if one is available. If it suceeds, that implies that the cursor was
+    // Try to use a saved grid if one is available. If it succeeds, that implies that the cursor was
     // recently hidden and what we're drawing is how the screen looked just before the cursor was
     // hidden. Therefore, we'll temporarily show the cursor, but we'll need to restore cursorVisible's
     // value when we're done.
@@ -1320,7 +1320,8 @@ static const int kDragThreshold = 3;
 // * Press L in AquaSKK's Hiragana to enter AquaSKK's ASCII
 // * "special" keys, like Enter which go through doCommandBySelector
 // * Repeated special keys
-- (void)keyDown:(NSEvent*)event {
+- (void)keyDown:(NSEvent *)event {
+    event = [event eventByChangingYenToBackslash];
     [_altScreenMouseScrollInferer keyDown:event];
     if (![_delegate textViewShouldAcceptKeyDownEvent:event]) {
         return;
