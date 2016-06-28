@@ -3608,6 +3608,7 @@ static double EuclideanDistance(NSPoint p1, NSPoint p2) {
     if ([item action] == @selector(saveImageAs:) ||
         [item action] == @selector(copyImage:) ||
         [item action] == @selector(openImage:) ||
+        [item action] == @selector(togglePauseAnimatingImage:) ||
         [item action] == @selector(inspectImage:)) {
         return YES;
     }
@@ -4246,6 +4247,18 @@ static double EuclideanDistance(NSPoint p1, NSPoint p2) {
     }
 }
 
+- (void)togglePauseAnimatingImage:(id)sender {
+    iTermImageInfo *imageInfo = [sender representedObject];
+    if (imageInfo) {
+        imageInfo.paused = !imageInfo.paused;
+        if (!imageInfo.paused) {
+            // A redraw is needed to recompute which visible lines are animated
+            // and ensure they keep getting redrawn on a fast cadence.
+            [self setNeedsDisplay:YES];
+        }
+    }
+}
+
 - (iTermImageInfo *)imageInfoAtCoord:(VT100GridCoord)coord {
     if (coord.x < 0 ||
         coord.y < 0 ||
@@ -4363,6 +4376,14 @@ static double EuclideanDistance(NSPoint p1, NSPoint p2) {
                   @"selector": @"openImage:" },
                @{ @"title": @"Inspect",
                   @"selector": @"inspectImage:" } ];
+        if (imageInfo.animated || imageInfo.paused) {
+            NSString *selector = @"togglePauseAnimatingImage:";
+            if (imageInfo.paused) {
+                entryDicts = [entryDicts arrayByAddingObject:@{ @"title": @"Resume Animating", @"selector": selector }];
+            } else {
+                entryDicts = [entryDicts arrayByAddingObject:@{ @"title": @"Stop Animating", @"selector": selector }];
+            }
+        }
         for (NSDictionary *entryDict in entryDicts) {
             NSMenuItem *item;
 
@@ -5552,8 +5573,7 @@ static double EuclideanDistance(NSPoint p1, NSPoint p2) {
 #pragma mark - Private methods
 
 // Compute the length, in _charWidth cells, of the input method text.
-- (int)inputMethodEditorLength
-{
+- (int)inputMethodEditorLength {
     if (![self hasMarkedText]) {
         return 0;
     }
@@ -5579,6 +5599,10 @@ static double EuclideanDistance(NSPoint p1, NSPoint p2) {
     // that span line breaks being wrapped to the next line.
     int x = [_dataSource cursorX] - 1;  // cursorX is 1-based
     int width = [_dataSource width];
+    if (width == 0 && len > 0) {
+        // Width should only be zero in weirdo edge cases, but the modulo below caused crashes.
+        return len;
+    }
     int extra = 0;
     int curX = x;
     for (int i = 0; i < len; ++i) {
